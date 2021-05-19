@@ -1,0 +1,53 @@
+Sub clear()
+
+    On Error Resume Next
+    Sheets("dashboard").ShowAllData
+    Columns("A:E").Select
+    Selection.clear
+    ActiveCell.FormulaR1C1 = ""
+    Selection.AutoFilter
+    Range("A1").Value = "Instructions"
+    Range("A2").Value = "Paste VNA consolidation recommendations here."
+    Range("A3").Value = "Click on Sort.  Adjust threshold as desired."
+    Range("A4").Value = "Then, click on Filter to select and copy formatted picks."
+    Range("A1").Select
+End Sub
+Sub sort()
+
+Dim last_row As Integer
+last_row = Cells(Rows.Count, 1).End(xlUp).Row
+
+    Cells.Select
+    Application.CutCopyMode = False
+    ActiveWorkbook.Worksheets("dashboard").sort.SortFields.clear
+    ActiveWorkbook.Worksheets("dashboard").sort.SortFields.Add2 _
+        Key:=Range("B2:B" & last_row), SortOn:=xlSortOnValues, Order:=xlAscending, _
+        DataOption:=xlSortNormal
+    ActiveWorkbook.Worksheets("dashboard").sort.SortFields.Add2 _
+        Key:=Range("E2:E" & last_row), SortOn:=xlSortOnValues, Order:=xlAscending, _
+        DataOption:=xlSortNormal
+    With ActiveWorkbook.Worksheets("dashboard").sort
+        .SetRange Range("A1:O" & last_row)
+        .Header = xlYes
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    Range("A1").Select
+End Sub
+Sub copyPicks()
+
+Dim last_row As Integer
+last_row = Cells(Rows.Count, 1).End(xlUp).Row
+
+    Sheets("dashboard").Range("A1").Select
+    Selection.AutoFilter
+    ActiveSheet.Range("$A$1:$J$" & last_row).AutoFilter Field:=8, Criteria1:="TRUE"
+    Range("I2:I" & last_row).SpecialCells(xlCellTypeVisible).Select
+    Selection.Copy
+End Sub
+Sub sortAndFilter()
+Call sort
+Call copyPicks
+End Sub
