@@ -1,0 +1,34 @@
+Sub comma100()
+
+Columns(2).ClearContents
+
+For s = 1 To 1000
+
+    For i = 1 To 100
+
+    If Cells((s - 1) * 100 + i, 1).Value = "" Then
+        Exit Sub
+    End If
+    
+    If i = 1 Then
+        Cells(s, 2).Value = Cells((s - 1) * 100 + i, 1).Value
+    Else
+        Cells(s, 2).Value = Cells(s, 2).Value & "," & Cells((s - 1) * 100 + i, 1).Value
+    End If
+    
+    Next
+
+Next
+
+End Sub
+Sub clear()
+'
+' clear Macro
+'
+
+'
+    Range("A1").Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.ClearContents
+    Range("A1").Select
+End Sub
