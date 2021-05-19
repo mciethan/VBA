@@ -1,0 +1,115 @@
+Sub RefreshData()
+' create and assign variables
+
+Dim rodeoSheet, binsSheet, URLSheet As Worksheet
+Dim rodeoURL, binsURL1, binsURL2 As String
+
+Set rodeoSheet = ActiveWorkbook.Sheets("rodeo items")
+Set binsSheet = ActiveWorkbook.Sheets("bins report")
+Set URLSheet = ActiveWorkbook.Sheets("URLs")
+
+rodeoURL = URLSheet.Cells(1, 2).Value
+binsURL1 = URLSheet.Cells(2, 6).Value
+binsURL2 = URLSheet.Cells(3, 6).Value
+
+' disable automatic calculation and screen updating during progress of macro
+Application.ScreenUpdating = False
+Application.Calculation = xlManual
+
+' clear cells from both sheets
+rodeoSheet.Range("$A:$Z").Clear
+binsSheet.Range("$C:$Z").Clear
+
+' pull rodeo data and paste into sheet
+    Workbooks.Open Filename:= _
+        rodeoURL
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Selection, Selection.End(xlToRight)).Select
+    Selection.Copy
+    Windows("Consolidation Opportunity Finder").Activate
+    ActiveSheet.Paste Destination:=rodeoSheet.Range("A1")
+    Windows(Right(rodeoURL, 8)).Activate
+    Range("AA1").Select
+    Application.CutCopyMode = False
+    Selection.Copy
+    ActiveWindow.Close
+    
+' refreshes rodeo PivotTable cache based on this data
+
+
+' Pulls in floor 1 bins report data
+    With binsSheet.QueryTables.Add(Connection:= _
+        "URL;" & binsURL1 _
+        , Destination:=binsSheet.Range("$C$1"))
+        .Name = Right(binsURL1, 8)
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .BackgroundQuery = True
+        .RefreshStyle = xlOverwriteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .WebSelectionType = 2
+        .WebFormatting = xlWebFormattingNone
+        .WebPreFormattedTextToColumns = True
+        .WebConsecutiveDelimitersAsOne = True
+        .WebSingleBlockTextImport = False
+        .WebDisableDateRecognition = False
+        .WebDisableRedirections = False
+        .Refresh BackgroundQuery:=False
+        .Delete
+        
+    End With
+    
+' define new variable to find next blank row
+Dim nextRow As Long
+nextRow = binsSheet.Cells(binsSheet.Rows.Count, "C").End(xlUp).Row
+
+' pull floor 2 data and paste it below floor 1 data
+    With binsSheet.QueryTables.Add(Connection:= _
+        "URL;" & binsURL2 _
+        , Destination:=binsSheet.Range("C" & nextRow))
+        .Name = Right(binsURL2, 8)
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .BackgroundQuery = True
+        .RefreshStyle = xlOverwriteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .WebSelectionType = 2
+        .WebFormatting = xlWebFormattingNone
+        .WebPreFormattedTextToColumns = True
+        .WebConsecutiveDelimitersAsOne = True
+        .WebSingleBlockTextImport = False
+        .WebDisableDateRecognition = False
+        .WebDisableRedirections = False
+        .Refresh BackgroundQuery:=False
+        .Delete
+        
+    End With
+    
+' Splits Bins Report Data
+
+    binsSheet.Activate
+    Columns("C:C").Select
+    Selection.TextToColumns Destination:=Range("C1"), DataType:=xlDelimited, _
+        TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=True, _
+        Semicolon:=False, Comma:=True, Space:=False, Other:=False, FieldInfo _
+        :=Array(Array(1, 1), Array(2, 1), Array(3, 1)), TrailingMinusNumbers:=True
+        
+' refresh pivot table data
+Application.Calculation = xlAutomatic
+Worksheets("bins pivot").PivotTables("PivotTable2").PivotCache.Refresh
+Worksheets("bins pivot").Activate
+Application.ScreenUpdating = True
+
+End Sub
