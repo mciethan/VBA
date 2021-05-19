@@ -1,0 +1,277 @@
+Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+' sheet code for deep-diving IOL buckets from the dashboard
+Dim r, c, i As Integer
+Dim ws As Worksheet
+
+For i = 1 To 7 ' dummy variable
+
+c = 2 * i + 1
+
+For r = 6 To 13
+    
+    If Target.Column = c And Target.Row = r Then
+    
+    On Error Resume Next
+    Worksheets("Raw").ShowAllData
+    Worksheets("DataD").ShowAllData
+    On Error GoTo 0
+    
+    If r = 13 Then
+        Set ws = ActiveWorkbook.Worksheets("Raw")
+    Else
+        Set ws = ActiveWorkbook.Worksheets("DataD")
+    End If
+
+    ws.Range("A1").AutoFilter Field:=1, _
+        Criteria1:=Sheets("Main").Cells(r, 3).Value
+    
+    If c >= 7 Then
+        ws.Range("B1").AutoFilter Field:=2, _
+            Criteria1:=">=" & Sheets("Main").Cells(14, c).Value, _
+                Operator:=xlAnd, _
+            Criteria2:="<" & Sheets("Main").Cells(14, c + 1).Value
+    End If
+    
+    ws.Select
+    
+    End If
+
+    
+Next r
+
+Next i
+
+End Sub
+Private Sub Worksheet_FollowHyperlink(ByVal Target As Hyperlink)
+' sheet code in Search Tool for links
+    ActiveWindow.ScrollRow = ActiveCell.Row
+End Sub
+Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+' sheet code in Search tool for double clicks
+    Cancel = True
+    If Sheets("Search Tool").Cells(Target.Row, 6) <> "" Then
+        MsgBox "Cannot insert rows in the middle of the table of contents.  Please choose a row farther down."
+        Exit Sub
+    End If
+    Target.Offset(1).EntireRow.Insert
+    Target.EntireRow.Copy Target.Offset(1).EntireRow
+    On Error Resume Next
+    Target.Offset(1).EntireRow.SpecialCells(xlConstants).ClearContents
+End Sub
+Function getUserBadgeID() As String
+    Dim H As Object, JSON As Object
+    Dim badge_id As String
+    Set H = CreateObject("WinHTTP.WinHTTPRequest.5.1")
+    
+    With H
+        .SetAutoLogonPolicy 0
+        .SetTimeouts 0, 0, 0, 0
+        .Open "GET", "https://fclm-portal.amazon.com/ajax/partialEmployeeSearch?term=" & Environ("Username")
+        .send
+        .WaitForResponse
+    End With
+    
+DoEvents
+
+badge_id = Split(Split(H.responseText, "badgeBarcodeId"":""", , vbBinaryCompare)(1), """", , vbBinaryCompare)(0)
+    
+getUserBadgeID = badge_id
+End Function
+Sub Run()
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    Application.Calculation = xlCalculationManual
+    
+    Call IOL
+    Call Raw
+    
+    Application.Calculation = xlCalculationAutomatic
+    Sheets("Main").Select
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+
+End Sub
+Sub Clear()
+Dim firstRow, lastRow
+For i = 1 To 12
+    firstRow = Range("Section" & i).Row + 1
+    lastRow = Range("Section" & i + 1).Row - 1
+    Sheets("Search Tool").Range("C" & firstRow, "C" & lastRow).ClearContents
+Next i
+End Sub
+Sub HyperLs()
+For j = 3 To 3
+For i = 6 To 12
+    Sheets("Main").Hyperlinks.Add Anchor:=Sheets("Main").Range(Cells(i, j), Cells(i, j)), Address:="", SubAddress:="", TextToDisplay:=Sheets("Main").Range(Cells(i, j), Cells(i, j)).Formula
+Next i
+j = j + 1
+Next j
+End Sub
+Sub IOL()
+    Dim DataObj As Object
+    Dim dump As Worksheet, Drops As Worksheet, MN As Worksheet
+    Dim wf As WorksheetFunction
+    Dim URL As String
+    Set wf = Application.WorksheetFunction
+    
+    Dim B$, F$, H As Object 'WinHttp V5.1
+    
+    Set dump = ThisWorkbook.Sheets("DataD")
+    Set Drops = ThisWorkbook.Sheets("Controls")
+    Set MN = ThisWorkbook.Sheets("Main")
+    FC = MN.Range("B3")
+    Login = Environ("username")
+        
+    dump.Select
+    If dump.Range("A1") <> "" Then
+    dump.Range("A1:N1").AutoFilter
+    Else: End If
+    dump.Cells.Clear
+    x = 1
+    For i = 10 To 16 ' downloads IOL one bucket at a time into the DataD sheet
+        If Sheets("Controls").Range("C" & i) = "" Then Exit Sub
+        With dump
+            ' Fixed by: Alexander Zeledon (azzeledo)
+            ' Found a way to login to fcmenu
+            Set H = CreateObject("WinHTTP.WinHTTPRequest.5.1")
+            H.SetAutoLogonPolicy 0
+
+            H.Open "GET", "https://fclm-portal.amazon.com/ajax/partialEmployeeSearch?term=" & Environ("Username")
+            H.send
+
+            DoEvents
+
+            B = Split(Split(H.responseText, "badgeBarcodeId"":""")(1), Chr(34))(0)
+
+            If InStr(H.responseText, "warehouseId") > 0 Then F = Split(Split(H.responseText, "warehouseId"":""")(1), Chr(34))(0)
+            If F = vbNullString Then F = Sheet1.Range("FC").Value
+
+            H.Open "POST", "http://fcmenu-iad-regionalized.corp.amazon.com/do/login"
+            H.setRequestHeader "Content-Type", "application/x-www-form-urlencoded"
+            H.setRequestHeader "Content-Length", Len("badgeBarcodeId=" & B)
+            H.send "badgeBarcodeId=" & B
+
+            DoEvents
+            
+            H.Open "GET", "http://peculiar-inventory-na.aka.corp.amazon.com"
+            H.SetAutoLogonPolicy 0
+            H.send
+            
+            URL = Sheets("Controls").Range("B10") & Sheets("Controls").Range("C" & i)
+            
+            Debug.Print URL
+
+            H.Open "GET", URL
+            H.send
+            
+            CSV_Text = H.responseText
+            CSV_Strings = Split(Trim(CSV_Text), vbLf)
+            Set DataObj = dump.Range(Cells(x, 4), Cells(UBound(CSV_Strings) + x, 4))
+            DataObj = WorksheetFunction.Transpose(CSV_Strings)
+            DataObj.TextToColumns Destination:=dump.Range("C" & x), _
+                DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, _
+                Tab:=False, Semicolon:=False, Comma:=True, Space:=False, Other:=False, FieldInfo _
+                :=Array(Array(1, 3), Array(2, 1), Array(3, 1), Array(4, 1), Array(5, 1), Array(6, 1), _
+                Array(7, 1), Array(8, 1), Array(9, 1), Array(10, 1), Array(11, 1), Array(12, 1), _
+                Array(13, 1), Array(14, 1), Array(15, 1), Array(16, 1), Array(17, 1), Array(18, 1), Array(19, 1)), DecimalSeparator:=".", _
+                TrailingMinusNumbers:=True
+        End With
+        LR = dump.Cells(Rows.Count, "C").End(xlUp).Row
+        dump.Range("A" & x & ":A" & LR).Value = Sheets("Controls").Range("C" & i) ' sets column A to be the name of the bucket
+        dump.Range("B" & x & ":B" & LR).Formula = "=D" & x & "/1000/60/60/24" ' sets column B to be the idle time in days
+        
+        dump.Range("A" & x & ":B" & LR).Value = dump.Range("A" & x & ":B" & LR).Value
+        If x <> 1 Then
+            dump.Range(x & ":" & x).Delete Shift:=x1Up
+        Else
+            dump.Range("A1").Value = "Owner"
+            dump.Range("B1").Value = "DayTime"
+            dump.Range("C1").Value = "Dwell Time"
+        End If
+        x = dump.Cells(Rows.Count, "A").End(xlUp).Row + 1 ' increments x to the next blank row
+    Next i
+dump.Range("A:N").Sort Key1:=Range("B1"), Order1:=xlDescending, Header:=xlYes
+End Sub
+Sub Raw()
+Dim DataObj As Object
+    Dim dump As Worksheet, Drops As Worksheet, MN As Worksheet
+    Dim wf As WorksheetFunction
+    Dim URL As String
+    Set wf = Application.WorksheetFunction
+    
+    Dim B$, F$, H As Object 'WinHttp V5.1
+    
+    Set dump = ThisWorkbook.Sheets("Raw")
+    Set Drops = ThisWorkbook.Sheets("Controls")
+    Set MN = ThisWorkbook.Sheets("Main")
+    FC = MN.Range("B3")
+    Login = Environ("username")
+        
+    dump.Select
+    If dump.Range("A1") <> "" Then
+    dump.Range("A1:N1").AutoFilter
+    Else: End If
+    dump.Cells.Clear
+    x = 1
+    
+        With dump
+            ' Fixed by: Alexander Zeledon (azzeledo)
+            ' Found a way to login to fcmenu
+            Set H = CreateObject("WinHTTP.WinHTTPRequest.5.1")
+            H.SetAutoLogonPolicy 0
+
+            H.Open "GET", "https://fclm-portal.amazon.com/ajax/partialEmployeeSearch?term=" & Environ("Username")
+            H.send
+
+            DoEvents
+
+            B = Split(Split(H.responseText, "badgeBarcodeId"":""")(1), Chr(34))(0)
+
+            If InStr(H.responseText, "warehouseId") > 0 Then F = Split(Split(H.responseText, "warehouseId"":""")(1), Chr(34))(0)
+            If F = vbNullString Then F = Sheet1.Range("FC").Value
+
+            H.Open "POST", "http://fcmenu-iad-regionalized.corp.amazon.com/do/login"
+            H.setRequestHeader "Content-Type", "application/x-www-form-urlencoded"
+            H.setRequestHeader "Content-Length", Len("badgeBarcodeId=" & B)
+            H.send "badgeBarcodeId=" & B
+
+            DoEvents
+            
+            H.Open "GET", "http://peculiar-inventory-na.aka.corp.amazon.com"
+            H.SetAutoLogonPolicy 0
+            H.send
+            
+            URL = Sheets("Controls").Range("B10") & Sheets("Controls").Range("D10")
+            
+            Debug.Print URL
+
+            H.Open "GET", URL
+            H.send
+            
+            CSV_Text = H.responseText
+            CSV_Strings = Split(Trim(CSV_Text), vbLf)
+            Set DataObj = dump.Range(Cells(x, 4), Cells(UBound(CSV_Strings) + x, 4))
+            DataObj = WorksheetFunction.Transpose(CSV_Strings)
+            DataObj.TextToColumns Destination:=dump.Range("C" & x), _
+                DataType:=xlDelimited, TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, _
+                Tab:=False, Semicolon:=False, Comma:=True, Space:=False, Other:=False, FieldInfo _
+                :=Array(Array(1, 3), Array(2, 1), Array(3, 1), Array(4, 1), Array(5, 1), Array(6, 1), _
+                Array(7, 1), Array(8, 1), Array(9, 1), Array(10, 1), Array(11, 1), Array(12, 1), _
+                Array(13, 1), Array(14, 1), Array(15, 1), Array(16, 1), Array(17, 1), Array(18, 1), Array(19, 1)), DecimalSeparator:=".", _
+                TrailingMinusNumbers:=True
+        End With
+        LR = dump.Cells(Rows.Count, "C").End(xlUp).Row
+        dump.Range("A" & x & ":A" & LR).Formula = "=IFNA(INDIRECT(""'DataD'!A""&(MATCH('Raw'!I2,'DataD'!I:I,0))),""Unknown"")"
+        dump.Range("B" & x & ":B" & LR).Formula = "=D" & x & "/1000/60/60/24" ' sets column B to be the idle time in days
+        
+        dump.Range("A" & x & ":B" & LR).Value = dump.Range("A" & x & ":B" & LR).Value ' this makes it so that when users click on these cells, it shows the end value rather than the formula behind it
+        If x <> 1 Then
+            dump.Range(x & ":" & x).Delete Shift:=x1Up
+        Else
+            dump.Range("A1").Value = "Owner"
+            dump.Range("B1").Value = "DayTime"
+            dump.Range("C1").Value = "Dwell Time"
+        End If
+        x = dump.Cells(Rows.Count, "A").End(xlUp).Row + 1 ' increments x to the next blank row
+dump.Range("A:N").Sort Key1:=Range("B1"), Order1:=xlDescending, Header:=xlYes
+End Sub
