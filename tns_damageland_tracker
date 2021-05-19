@@ -1,0 +1,213 @@
+Private Sub Worksheet_Change(ByVal Target As Range)
+' sheet code for dashboard to prompt refresh with new FC
+Dim answer As Integer
+
+If Not Intersect(Target, Sheet2.Range("A1")) Is Nothing Then
+    answer = MsgBox("You have changed FC. Refresh query to show data for " & Sheet2.Range("A1").Value & "?", vbQuestion + vbYesNo + vbDefaultButton2, "Change in FC")
+    If answer = vbYes Then
+        Call refreshData
+    Else
+        ' do nothing
+    End If
+Else
+    ' do nothing
+End If
+
+End Sub
+Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+' sheet code for dashboard to prompt refresh with new data
+Dim answer As Integer
+Dim lastUpdated As String
+
+lastUpdated = Sheet2.Range("H1").Value
+
+' each time a different cell is selected, update H1 with the last modified datetime of the query textfile from Datanet. if the Datanet file updates while user is making selection changes in the file, they will be asked if they want to refresh.
+Sheet2.Range("H1").Value = Int(FileDateTime("//ant/dept-na/BOS7/Public/ICQA DA/Inventory/TNS_damageland.txt")) - 1
+
+If lastUpdated <> Sheet2.Range("H1").Value Then
+    answer = MsgBox("There is more recent data available. Refresh query?", vbQuestion + vbYesNo + vbDefaultButton2, "More recent data available")
+    If answer = vbYes Then
+        Call refreshData
+    Else
+        ' do nothing
+    End If
+Else
+    ' do nothing
+End If
+
+End Sub
+Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+' sheet code for dashboard for deep diving buckets
+Application.ScreenUpdating = False
+
+Dim r, c, i, lastRowOfBinTypes As Integer
+Dim recs, bins, dash As Worksheet
+
+lastRowOfBinTypes = Sheet2.Cells(Rows.Count, "J").End(xlUp).Row
+
+Set dash = Sheet2 ' dashboard
+Set recs = Sheet1 ' records sheet
+Set bins = Sheet4 ' bins sheet
+
+' this nested loop handles double-clicks on the cells in the inventory ownership/age table, which has fixed dimensions
+For c = 4 To 8 ' column indices
+
+For r = 8 To 18 ' row indices
+    
+    If Target.Column = c And Target.Row = r Then
+    
+    ' clears any active filters from records sheet
+    recs.AutoFilter.ShowAllData
+    
+        If r <> 8 Then
+            ' sets filter on column 11 (owner) for any row except for row 8 (the TOTAL row)
+            recs.ListObjects("TNS_damageland").Range.AutoFilter Field:=11, _
+            Criteria1:="=*" & dash.Cells(r, 3).Value & "*", Operator:=xlAnd
+        End If
+    
+        If c > 4 Then
+            ' sets filter on column 12 (received_date) for any column except column 4 (the All column)
+            recs.ListObjects("TNS_damageland").Range.AutoFilter Field:=12, _
+            Criteria1:=">=" & dash.Cells(5, c).Value, Operator:=xlAnd, Criteria2:="<=" & dash.Cells(5, c - 1).Value
+        End If
+    
+    recs.Select
+    
+    End If
+
+    
+Next r
+
+Next c
+
+' this loop handles double-clicks on the links in the bin fullness table.  we have to use a variable (lastRowOfBinTypes) because different sites have different numbers of bin types in damageland
+For r = 8 To lastRowOfBinTypes
+
+    If Target.Column = 11 And Target.Row = r Then
+    
+    ' clears any active filters from bins sheet
+    bins.AutoFilter.ShowAllData
+    
+    If r <> 8 Then ' sets filter on column 2 (bin type) for every row except row 8 (the TOTAL row)
+    bins.Range("A:F").AutoFilter Field:=2, _
+            Criteria1:="=" & dash.Cells(r, 10).Value, Operator:=xlAnd
+    End If
+    
+    bins.Select
+    
+    End If
+
+Next r
+
+Application.ScreenUpdating = True
+
+End Sub
+Private Sub Workbook_Open()
+
+Dim answer As Integer
+
+' each time the workbook is opened, update H1 with the last modified datetime of the query textfile from Datanet
+Sheet2.Range("H1").Value = Int(FileDateTime("//ant/dept-na/BOS7/Public/ICQA DA/Inventory/TNS_damageland.txt")) - 1
+
+If Sheet2.Range("D1").Value <> Sheet2.Range("H1").Value Then
+    answer = MsgBox("There is more recent data available. Refresh query?", vbQuestion + vbYesNo + vbDefaultButton2, "More recent data available")
+    If answer = vbYes Then
+        Call refreshData
+    Else
+        ' do nothing
+    End If
+Else
+    ' do nothing
+End If
+End Sub
+Sub refreshData()
+
+MsgBox "Please allow up to 30 seconds for the query to refresh."
+
+Application.ScreenUpdating = False
+
+Dim lastrow As Long
+Dim lastRowOfBinTypes As Integer
+
+' H1 stores the FileDateTime of the query text file and updates every time the workbook is opened to reflect most recent Datanet results.  This code updates the value of D1 each time this macro runs.
+ThisWorkbook.Connections("Query - TNS_damageland").refresh
+Sheet2.Range("D1").Value = Sheet2.Range("H1").Value
+
+Sheet1.AutoFilter.ShowAllData ' clear any filters that are active on the records sheet
+
+lastrow = Sheet1.Cells(Rows.Count, "B").End(xlUp).Row
+' MsgBox lastrow
+
+Sheet2.Range("J:N").Clear
+
+Sheet4.Cells.Clear
+Sheet1.Select
+Columns("A:E").Select
+Selection.Copy
+Sheet4.Select
+Range("A1").Select
+ActiveSheet.Paste
+Application.CutCopyMode = False
+
+
+With Sheet4
+    .Range("$A$1:$E$" & lastrow).RemoveDuplicates Columns:=3, Header:=xlYes
+
+    Dim lastRowBins As Long
+    lastRowBins = .Cells(Rows.Count, "B").End(xlUp).Row
+
+    .Range("F1").Value = "total_units"
+    .Range("F2:F" & lastRowBins).Formula = "=SUMIFS(records!C10,records!C3,RC[-3])"
+
+    .Range("$A$1:$F$" & lastrow).Select
+    Selection.AutoFilter
+
+    .Columns("E:E").ColumnWidth = 16.64
+    .Columns("D:D").ColumnWidth = 23.64
+    .Columns("F:F").ColumnWidth = 11.36
+
+End With
+    
+Sheet1.Range("TNS_damageland[bin_type]").AdvancedFilter Action:= _
+        xlFilterCopy, CopyToRange:=Sheet2.Range("J8"), Unique:=True
+        
+With Sheet2
+
+.Range("J7").Value = "Bin Type Name"
+.Range("K7").Value = "Total Bins"
+.Range("L7").Value = "Total Units"
+.Range("M7").Value = "Average Units per Bin"
+.Range("N7").Value = "Utilization"
+
+.Range("J8").Value = "TOTAL"
+.Range("K8").Formula = "=COUNTA(bins!C:C) - 1"
+.Range("L8").Formula = "=SUM(bins!F:F)"
+.Range("M8").Formula = "=ROUND(RC[-1]/RC[-2],2)"
+.Range("N8").Formula = "=SUM(bins!D:D)/SUM(bins!E:E)"
+.Range("N8").NumberFormat = "0.00%"
+
+lastRowOfBinTypes = .Cells(Rows.Count, "J").End(xlUp).Row
+
+.Rows("8:8").Font.bold = True
+.Range("K8:K" & lastRowOfBinTypes).Font.Underline = xlUnderlineStyleSingle
+    With .Range("K8:K" & lastRowOfBinTypes).Font
+        .Color = -4165632
+        .TintAndShade = 0
+    End With
+
+.Range("K9:K" & lastRowOfBinTypes).Formula = "=COUNTIF(bins!C2,RC[-1])"
+.Range("L9:L" & lastRowOfBinTypes).Formula = "=SUMIF(bins!C2,RC[-2],bins!C6)"
+.Range("M9:M" & lastRowOfBinTypes).Formula = "=ROUND(RC[-1]/RC[-2],2)"
+With .Range("N9:N" & lastRowOfBinTypes)
+    .Formula = "=SUMIF(bins!C2,RC[-4],bins!C4)/SUMIF(bins!C2,RC[-4],bins!C5)"
+    .NumberFormat = "0.00%"
+End With
+
+End With
+
+Sheet1.Range("A1").AutoFilter
+Sheet2.Select
+
+Application.ScreenUpdating = True
+End Sub
+
