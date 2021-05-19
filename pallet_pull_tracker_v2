@@ -1,0 +1,224 @@
+Sub DPSpull()
+Application.ScreenUpdating = False
+Application.Calculation = xlCalculationAutomatic
+Application.Calculation = xlCalculationManual
+
+' define and set variables
+Dim r, i, x, z, last_row, aLR, dbLR As Integer
+Dim p1pLR As Long
+Dim temp As Double
+Dim FC, startDay, endDay, url As String
+
+startDay = Sheet2.Range("C1").Value
+endDay = Sheet2.Range("B1").Value
+FC = Sheet2.Range("FC").Value
+url = "https://dpsportal-na.amazon.com/palletstowrecommendation/downloadVerificationActivityReport.do?warehouseId=" & FC & "&fromDate=" & startDay & "&toDate=" & endDay & "&login="
+aLR = Sheet3.Cells(Rows.Count, 1).End(xlUp).Row
+p1pLR = Sheet4.Cells(Rows.Count, 1).End(xlUp).Row
+
+' refreshes background queries for amnesty and P-1-P transactions only if the text files from the Datanet drop have been updated compared to the data currently in the sheet
+Dim a, p As Date
+
+a = Int(filedatetime("\\ant\dept-na\BOS7\Public\ICQA DA\Amnesty\weekly_amnesty_adds.txt"))
+p = Int(filedatetime("\\ant\dept-na\BOS7\Public\ICQA DA\Transactions\P1P_transactions_2weeks.txt"))
+
+If a = Sheet3.Range("A" & aLR).Value Then
+    ' do nothing
+Else
+    ' refresh amnesty query
+    ActiveWorkbook.Connections("Query - weekly_amnesty_adds").Refresh
+End If
+
+If p = Int(Sheet4.Range("A2").Value) Then
+    ' do nothing
+Else
+    ' refresh P1P query
+    ActiveWorkbook.Connections("Query - P1P_transactions_2weeks").Refresh
+End If
+
+' resets these variables storing the last nonblank row number of the amnesty and P1P sheets, after any queries have refreshed
+aLR = Sheet3.Cells(Rows.Count, 1).End(xlUp).Row
+p1pLR = Sheet4.Cells(Rows.Count, 1).End(xlUp).Row
+
+'Clear DPS Data
+    Sheet1.Select ' Raw Data sheet
+    Columns("A:AZZ").Select
+    Selection.ClearContents
+    
+'Pull DPS Data and add helper column converting DPS verification time to FC timezone
+Call getFromURL(url, Sheet1)
+    
+With Sheet1
+    .Select
+    last_row = Sheet1.Cells(Rows.Count, 1).End(xlUp).Row ' this needs to be here, not in the variables above, so it gets the info
+    
+    .Range("H1").Value = "Verify Time EST"
+    .Range("J1").Value = "Last FNSku in Bin"
+    .Range("M1").Value = "Add Location"
+    .Range("N1").Value = "Add Time"
+    .Range("Q1").Value = "Risk Score"
+    
+    .Range("H2:H" & last_row).Formula = "=RC[-5]+RC[-4]-4/24" ' converts from DPS time to EST
+    .Range("I2:I" & last_row).Formula = "=MATCH(RC[-3]+RC[-2]-4/24,'P-1-P'!C1,-1)" ' returns the index of P1P transactions table at the bin empty time
+    
+    ' this particular search formula with INDEX and MATCH is for whatever reason faster at finding most recent FNSku than all alternative excel formulas like VLOOKUP, regular LOOKUP, array formulas, etc
+    .Range("J2:J" & last_row).Formula = "=INDEX(INDIRECT(""'P-1-P'!C""&RC[-1]&"":C" & p1pLR & """),MATCH(RC[-8],INDIRECT(""'P-1-P'!G""&RC[-1]&"":G" & p1pLR & """),0))" ' searches for the FNSku most recently in the verified bin, starting from bin empty time.
+    
+    .Range("K2:K" & last_row).Formula = "=MATCH(RC[-3],'Amnesty Adds'!C2,1)+1" ' index of amnesty events table at bin verification time
+    .Range("L2:L" & last_row).Formula = "=MATCH(RC[-4]+12/24,'Amnesty Adds'!C2,1)+1" ' index of amnesty events table 12 hours after bin verification time
+    
+    ' returns the addback location and addback time of any matching amnesty adds with a matching FNSku between the above indices (i.e. amnesty adds of that FNSku up to 12hrs after bin verification)
+    .Range("M2:M" & last_row).Formula = "=INDEX(INDIRECT(""'Amnesty Adds'!E"" & RC[-2] & "":E"" & RC[-1]),MATCH(RC[-3],INDIRECT(""'Amnesty Adds'!G"" & RC[-2] & "":G"" & RC[-1]),0))"
+    .Range("N2:N" & last_row).Formula = "=INDEX(INDIRECT(""'Amnesty Adds'!B"" & RC[-3] & "":B"" & RC[-2]),MATCH(RC[-4],INDIRECT(""'Amnesty Adds'!G"" & RC[-3] & "":G"" & RC[-2]),0))"
+    
+    .Range("O2:O" & last_row).Formula = "=RC[-1]-RC[-7]" ' time in hours between bin verification time and amnesty add time
+    .Range("P2:P" & last_row).Formula = "=ABS(NUMBERVALUE(MID(RC[-3],6,3))-NUMBERVALUE(MID(RC[-14],6,3)))" ' number of aisles between bin verify location and amnesty add location,
+    
+    ' this is a arbitrary number which is meant to be a "score" of how likely each instance of amnesty is likely to be caused by the pallet puller
+    ' the closer the addback location to the verify location, and the lower the time between verification and amnesty, the higher the score
+    ' the square root and exponent bits are set up to add more weight to the number of aisles away and less weight to the dwell time
+    .Range("Q2:Q" & last_row).Formula = "=round(sqrt(100/(sqrt(RC[-2])*(RC[-1]+2)^2.5)),2)"
+    
+
+    .Range("K1").FormulaArray = "=SUM(1/COUNTIF(A2:A" & last_row & ",A2:A" & last_row & "))" ' calculates number of unique pallet pull AAs
+
+
+Application.Calculation = xlCalculationAutomatic
+Application.Calculation = xlCalculationManual
+
+dbLR = .Range("K1").Value + 14 ' dbLR variable is the number of unique pallet pull AAs for the week, offset by 14 since the dashboard rates table starts at row 14
+.Range("K1").ClearContents
+
+Debug.Print dbLR
+
+' these column widths, filters, and sorts just make for a better view if users are looking at the Raw Data table
+    Columns("C:C").ColumnWidth = 0.67
+    Columns("D:D").ColumnWidth = 0.78
+    Columns("E:E").ColumnWidth = 1.18
+    Columns("F:F").ColumnWidth = 0.94
+    Columns("G:G").ColumnWidth = 1.27
+    Columns("H:H").ColumnWidth = 16
+    Columns("I:I").ColumnWidth = 0.78
+    Columns("J:J").ColumnWidth = 16
+
+    Range("A2").Select
+    Selection.AutoFilter
+    ActiveSheet.Range("$A$1:$Q$" & last_row).AutoFilter Field:=13, Criteria1:="<>#N/A" _
+        , Operator:=xlAnd
+    Columns("K:K").ColumnWidth = 0.94
+    Columns("L:L").ColumnWidth = 0.78
+    Columns("M:M").ColumnWidth = 12.45
+    Columns("N:N").ColumnWidth = 12.01
+    Columns("O:O").ColumnWidth = 27.82
+    Columns("P:P").ColumnWidth = 27.36
+    Columns("Q:Q").ColumnWidth = 13.09
+
+ActiveSheet.Range("$A$1:$Q$" & last_row).AutoFilter Field:=13, Criteria1:="<>#N/A" _
+        , Operator:=xlAnd
+        
+Range("A1").Select
+    ActiveWorkbook.Worksheets("Raw Data").AutoFilter.sort.SortFields.Clear
+    ActiveWorkbook.Worksheets("Raw Data").AutoFilter.sort.SortFields.Add2 Key:= _
+        Range("Q2:Q" & last_row), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption _
+        :=xlSortNormal
+    With ActiveWorkbook.Worksheets("Raw Data").AutoFilter.sort
+        .Header = xlYes
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+    
+End With
+
+' clear the dashboard contents
+If (Sheet2.AutoFilterMode And Sheet2.FilterMode) Or Sheet2.FilterMode Then
+  Sheet2.ShowAllData
+End If
+
+With Sheet2
+    .Select
+    .Range("F15").Select
+    Selection.CurrentArray.Select
+    Selection.ClearContents
+    .Select
+    .Range("D15:M15").End(xlDown).Clear
+
+' column D lists the AA login.  This recursive formula works in such a way that when you drop it down, it displays all unique logins once. because it's recursive, it seems to require this for loop
+For x = 15 To dbLR
+    .Cells(x, 4).Formula = "=LOOKUP(2,1/(COUNTIF($D$14:D" & x - 1 & ",'Raw Data'!$A$2:$A$" & last_row & ")=0),'Raw Data'!$A$2:$A$" & last_row & ")"
+Next x
+
+' counts number of bins verified by the associate during the shift
+    .Range("E15:E" & dbLR).Formula = "=COUNTIFS('Raw Data'!C1,RC[-1],'Raw Data'!C8,"">""&shiftStart,'Raw Data'!C8,""<""&shiftEnd)"
+
+' calculates the associate's first scan during the shift using an array formula
+For x = 15 To dbLR
+    .Cells(x, 6).FormulaArray = "=INDEX('Raw Data'!H:H,MATCH(1,(D" & x & "='Raw Data'!A:A)*(shiftStart<'Raw Data'!H:H)*(shiftEnd>'Raw Data'!H:H),0))"
+Next x
+    
+' calculates the associate's last or most recent scan during the shift
+    .Range("G15:G" & dbLR).Formula = "=LOOKUP(2,1/(('Raw Data'!R2C1:R" & last_row & "C1=RC[-3])*(shiftEnd>'Raw Data'!R2C8:'Raw Data'!R" & last_row & "C8)),'Raw Data'!R2C8:R" & last_row & "C8)"
+
+' subtracts first scan time from last scan time and displays it as a number of hours
+    .Range("H15:H" & dbLR).Formula = "=24*(RC[-1]-RC[-2])"
+
+' divides number of verifications by number of hours in path to display associate's rate of verifications per hour, rounded to two decimals
+    .Range("I15:I" & dbLR).Formula = "=IF(RC[-1] = 0, 0, ROUND(RC[-4]/RC[-1],2))"
+
+    .Range("J15:J" & dbLR).Formula = "=0"
+
+' performs a VLOOKUP to find the bin location of the most recent scan
+    .Range("K15:K" & dbLR).Formula = "=VLOOKUP(RC[-4],CHOOSE({1,2},'Raw Data'!R2C8:R" & last_row & "C8,'Raw Data'!R2C2:R" & last_row & "C2),2,FALSE)"
+
+' calculates each AA's false amnesty risk score.  These cells aren't meant to be displayed, but the False Amnesty dashboard table looks at these (column M for days, N for nights) to find the top 3
+    .Range("M15:M" & dbLR).Formula = "=SUMIFS('Raw Data'!C17,'Raw Data'!C1,RC[-9],'Raw Data'!C17,""<>#N/A"",'Raw Data'!C4,"">10:00 AM"",'Raw Data'!C4,""<10:00 PM"")"
+    .Range("N15:N" & dbLR).Formula = "=SUMIFS('Raw Data'!C17,'Raw Data'!C1,RC[-9],'Raw Data'!C17,""<>#N/A"",'Raw Data'!C4,""<10:00 AM"") +" _
+        & "SUMIFS('Raw Data'!C17,'Raw Data'!C1,RC[-9],'Raw Data'!C17,""<>#N/A"",'Raw Data'!C4,"">10:00 PM"")"
+
+' sets formulas in False Amnesty dashboard table to dynamically reflect the three AAs on the current shift with the top three false amnesty risk scores for that shift
+For z = 1 To 3
+    .Range("D" & z + 9).Formula = "=IF(H" & z + 9 & "=0,""--"",VLOOKUP(H" & z + 9 & ",CHOOSE({1,2},M$15:M$" & dbLR & ",D$15:D$" & dbLR & "),2,FALSE))"
+    .Range("H" & z + 9).Formula = "=IF($A$4=""Days"",LARGE(M$15:M$" & dbLR & "," & z & "),LARGE(N$15:N$" & dbLR & "," & z & "))"
+Next z
+
+End With
+
+Application.Calculation = xlCalculationAutomatic
+Application.Calculation = xlCalculationManual
+
+' this section adjusts the values in the "hours in path" column in order to account for break and lunch times
+For r = 15 To dbLR
+    For i = 4 To 6
+        If IsError(Sheet2.Cells(r, 6).Value) Then
+            ' do nothing
+        ElseIf Sheet2.Cells(r, 6).Value < Sheet2.Cells(i, 7).Value Then
+            If Sheet2.Cells(r, 7).Value > Sheet2.Cells(i, 8).Value Then
+                temp = Sheet2.Cells(r, 8).Value
+                Sheet2.Cells(r, 8).Value = temp - Sheet2.Cells(i, 9).Value / 60
+            End If
+        End If
+    Next i
+    
+    If IsError(Sheet2.Cells(r, 8).Value) Then
+            ' do nothing
+    Else
+            temp = Sheet2.Cells(r, 8).Value
+            Sheet2.Cells(r, 8).Value = Round(temp, 2)
+    End If
+Next r
+
+' filter list to only show AAs who have been pulling during current shift
+Sheet2.Select
+Range("D14").Select
+    Range(Selection, Selection.End(xlToRight)).Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.AutoFilter
+    ActiveSheet.Range("$D$14:$I$" & dbLR).AutoFilter Field:=2, Criteria1:="<>0", Operator:=xlAnd
+    
+    
+Sheet2.Range("FC").Select
+
+Application.ScreenUpdating = True
+    
+End Sub
