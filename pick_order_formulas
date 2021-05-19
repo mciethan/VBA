@@ -1,0 +1,126 @@
+Sub slotlist()
+
+Dim diff As Integer
+
+With Sheets("variables")
+
+    diff = .Range("H4").Value + 10 - .Range("F4").Value
+
+    .Columns(1).ClearContents
+    .Columns(2).ClearContents
+    
+    .Cells(1, 1).Value = .Range("F4").Value
+    .Cells(1, 2).Value = .Range("H4").Value + 10
+    .Cells(2, 1).formula = "=A1+1"
+    .Cells(2, 2).formula = "=B1-1"
+    Range("A2:B2").Copy
+    Range("A3:B" & diff + 1).PasteSpecial (xlPasteAll)
+    
+End With
+
+End Sub
+Sub sort()
+
+Application.ScreenUpdating = False
+Application.Calculation = xlCalculationManual
+
+Dim upSlotList, downSlotList, equal, notEqual, bool1, bool2, div4, notDiv4 As String
+
+equal = "="
+notEqual = "<>"
+' these strings refer to the corresponding ranges in the Excel file containing shelf and slot lists in upward & downward orders
+upSlotList = "variables!A:A"
+downSlotList = "variables!B:B"
+
+With Sheet2
+
+    ' adjusts variables such that the aisle entered by the user eventually gets sorted in an upward slot order, and so that the first slot group in each driving aisle starts picking from the lowest shelf
+    If .Range("L4").Value = .Range("M4").Value Then
+        If .Range("O4").Value = .Range("P4").Value Then
+            div4 = upSlotList
+            notDiv4 = downSlotList
+            bool1 = equal
+            bool2 = notEqual
+        Else
+            div4 = downSlotList
+            notDiv4 = upSlotList
+            bool1 = notEqual
+            bool2 = equal
+        End If
+    Else
+        If .Range("O4").Value = .Range("P4").Value Then
+            div4 = downSlotList
+            notDiv4 = upSlotList
+            bool1 = notEqual
+            bool2 = equal
+        Else
+            div4 = upSlotList
+            notDiv4 = downSlotList
+            bool1 = equal
+            bool2 = notEqual
+        End If
+    End If
+
+    ' offsets the aisle numbers by 1 for purposes of calculation if the second aisle in each pair is an odd number
+    If .Range("O4").Value = .Range("P4").Value Then
+        Sheet1.Cells(2, 2).formula = "=MID(A2,6,3)"
+    Else
+        Sheet1.Cells(2, 2).formula = "=MID(A2,6,3)+1"
+    End If
+
+End With
+
+With Sheet1
+
+    ' these cell formulas are just helper columns that split and parse the aisle, slot, and shelf of each bin ID to be able to sort optimally later
+    .Cells(2, 3).formula = "=EVEN(B2)" ' aisle group
+    .Cells(2, 4).formula = "=MID(A2,9,1)" ' shelf
+    .Cells(2, 5).formula = "=RIGHT(A2,3)" ' slot
+    .Cells(2, 6).formula = "=RIGHT(NUMBERVALUE(E2),1)" ' last digit of slot
+    .Cells(2, 7).formula = "=NUMBERVALUE(EVEN(EVEN(F2+1)/2))" ' slot digit group. slots are grouped so that the pick order has you pick the 0's and 2's going up the shelves, then 4's and 6s going down, etc
+    .Cells(2, 8).formula = "=NUMBERVALUE(LEFT(E2,2)&G2)" ' slot group
+    .Cells(2, 9).formula = "=IF(OR(AND(INT(C2/4)" & bool1 & "C2/4,INT(G2/4)<>G2/4),AND(INT(C2/4)" & bool2 & "C2/4,INT(G2/4)=G2/4)),MATCH(D2,variables!C:C,0),MATCH(D2,variables!D:D,0))" ' shelf pick order
+    .Cells(2, 10).formula = "=IF(INT(C2/4)<>C2/4,MATCH(H2," & notDiv4 & ",0),MATCH(H2," & div4 & ",0))" ' slot pick order
+    .Cells(2, 11).formula = "=IF(INT(C2/4)<>C2/4,MATCH(NUMBERVALUE(E2)," & notDiv4 & ",0),MATCH(NUMBERVALUE(E2)," & div4 & ",0))" ' slot mini pick order
+  
+    ' autofill formulas to as many cells as there are bin IDs
+    Range("B2:K2").Select
+    Selection.autofill Destination:=Range("B2:K" & Cells(Rows.Count, 1).End(xlUp).Row)
+    Range("A2").Select
+
+    ' toggle the sheet calculation mode back to automatic so that all the cell values get calculated before we sort anything
+    Application.Calculation = xlCalculationAutomatic
+
+    ' sort
+    Columns("A:K").Select
+    ActiveWorkbook.Worksheets("home").sort.SortFields.clear
+    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("B:B" _
+        ), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("J:J" _
+        ), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("I:I" _
+        ), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("K:K" _
+        ), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
+    With ActiveWorkbook.Worksheets("home").sort
+        .SetRange Range("A:K")
+        .Header = xlYes
+        .MatchCase = False
+        .Orientation = xlTopToBottom
+        .SortMethod = xlPinYin
+        .Apply
+    End With
+.Range("A1").Select
+
+End With
+
+Application.ScreenUpdating = True
+
+End Sub
+Sub clear()
+
+    Rows(2).Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.ClearContents
+    Cells(2, 1).Select
+End Sub
