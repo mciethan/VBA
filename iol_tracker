@@ -1,31 +1,33 @@
 Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
-' sheet code for deep-diving IOL buckets from the dashboard
+' sheet-specific code for the dashboard - double click on certain cells to automatically filter the IOL data sheet to deep-dive specific slices
+
 Dim r, c, i As Integer
 Dim ws As Worksheet
 
 For i = 1 To 7 ' dummy variable
 
-c = 2 * i + 1
+c = 2 * i + 1 ' not sure this is necessary - because we are dealing with merged cells, the Target should never hit the hidden cells, so it shouldn't matter if the for loop iterates to those 
 
 For r = 6 To 13
     
     If Target.Column = c And Target.Row = r Then
     
-    On Error Resume Next
+    On Error Resume Next ' should change this from the Worksheet method showAllData to the equivalent Autofilter method, which doesn't error out when no filters are on
     Worksheets("Raw").ShowAllData
     Worksheets("DataD").ShowAllData
     On Error GoTo 0
     
-    If r = 13 Then
+    If r = 13 Then ' The Peculiar Inventory website doesn't have a separate download option for the "unknown" bucket, so I had to make a separate data sheet (Raw) to capture that.
         Set ws = ActiveWorkbook.Worksheets("Raw")
     Else
         Set ws = ActiveWorkbook.Worksheets("DataD")
     End If
 
+    ' regardless of what cell you double-click, you need to filter by the name of the inventory ownership bucket, which is in column 3 of the dashboard
     ws.Range("A1").AutoFilter Field:=1, _
         Criteria1:=Sheets("Main").Cells(r, 3).Value
     
-    If c >= 7 Then
+    If c >= 7 Then ' column 6 is the "total" number for each ownership bucket, and columns 7 and up represent specific dwell time buckets, demarcated by values in row 14 of the dashboard
         ws.Range("B1").AutoFilter Field:=2, _
             Criteria1:=">=" & Sheets("Main").Cells(14, c).Value, _
                 Operator:=xlAnd, _
@@ -42,22 +44,26 @@ Next r
 Next i
 
 End Sub
+
 Private Sub Worksheet_FollowHyperlink(ByVal Target As Hyperlink)
-' sheet code in Search Tool for links
+' sheet-specific code in the Search Tool sheet to set the viewing window so that the destination cell is at the top of the screen whenever they click a link to go somewhere
     ActiveWindow.ScrollRow = ActiveCell.Row
 End Sub
+
 Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
-' sheet code in Search tool for double clicks
+' sheet-specific code in Search Tool sheet to allow users to double-click to add more rows to the sheet as needed
     Cancel = True
-    If Sheets("Search Tool").Cells(Target.Row, 6) <> "" Then
+    If Sheets("Search Tool").Cells(Target.Row, 6) <> "" Then ' the sheet has a table of contents in column 6, so this just prevents rows from being inserted in there.
         MsgBox "Cannot insert rows in the middle of the table of contents.  Please choose a row farther down."
         Exit Sub
     End If
     Target.Offset(1).EntireRow.Insert
-    Target.EntireRow.Copy Target.Offset(1).EntireRow
+    Target.EntireRow.Copy Target.Offset(1).EntireRow ' copies formulas and formats for the new row
     On Error Resume Next
     Target.Offset(1).EntireRow.SpecialCells(xlConstants).ClearContents
 End Sub
+
+' not sure if I actually ended up using this, but it was meant to just abstract this project a bit more since there are multiple data pulls.
 Function getUserBadgeID() As String
     Dim H As Object, JSON As Object
     Dim badge_id As String
@@ -77,13 +83,14 @@ badge_id = Split(Split(H.responseText, "badgeBarcodeId"":""", , vbBinaryCompare)
     
 getUserBadgeID = badge_id
 End Function
+
 Sub Run()
     Application.ScreenUpdating = False
     Application.DisplayAlerts = False
     Application.Calculation = xlCalculationManual
     
-    Call IOL
-    Call Raw
+    Call IOL ' this one downloads and pastes each bucket one at a time
+    Call Raw ' created a separate data pull to pull the "All" csv. explained in that sub
     
     Application.Calculation = xlCalculationAutomatic
     Sheets("Main").Select
@@ -91,6 +98,7 @@ Sub Run()
     Application.DisplayAlerts = True
 
 End Sub
+
 Sub Clear()
 Dim firstRow, lastRow
 For i = 1 To 12
@@ -99,6 +107,7 @@ For i = 1 To 12
     Sheets("Search Tool").Range("C" & firstRow, "C" & lastRow).ClearContents
 Next i
 End Sub
+
 Sub HyperLs()
 For j = 3 To 3
 For i = 6 To 12
@@ -107,6 +116,7 @@ Next i
 j = j + 1
 Next j
 End Sub
+
 Sub IOL()
     Dim DataObj As Object
     Dim dump As Worksheet, Drops As Worksheet, MN As Worksheet
@@ -178,7 +188,7 @@ Sub IOL()
         End With
         LR = dump.Cells(Rows.Count, "C").End(xlUp).Row
         dump.Range("A" & x & ":A" & LR).Value = Sheets("Controls").Range("C" & i) ' sets column A to be the name of the bucket
-        dump.Range("B" & x & ":B" & LR).Formula = "=D" & x & "/1000/60/60/24" ' sets column B to be the idle time in days
+        dump.Range("B" & x & ":B" & LR).Formula = "=D" & x & "/1000/60/60/24" ' sets column B to be the idle time in days (the raw data from the website is in seconds)
         
         dump.Range("A" & x & ":B" & LR).Value = dump.Range("A" & x & ":B" & LR).Value
         If x <> 1 Then
@@ -190,9 +200,13 @@ Sub IOL()
         End If
         x = dump.Cells(Rows.Count, "A").End(xlUp).Row + 1 ' increments x to the next blank row
     Next i
-dump.Range("A:N").Sort Key1:=Range("B1"), Order1:=xlDescending, Header:=xlYes
+dump.Range("A:N").Sort Key1:=Range("B1"), Order1:=xlDescending, Header:=xlYes ' sorts by idle time, high to low
 End Sub
+
 Sub Raw()
+' this is mostly a duplicate of the IOL sub, only difference is that instead of downloading individual buckets, this downloads the "All" csv. and it goes in a separate sheet
+' this is necessary because of a discrepancy on the Peculiar Inventory website where the "All" csv is not the sum of the individual bucket csvs - some entries are bucketless
+' by downloading the "All" csv as well as the individual buckets, we can compare the two lists in Excel, identify entries that don't have a bucket assigned, and call them "unknown"
 Dim DataObj As Object
     Dim dump As Worksheet, Drops As Worksheet, MN As Worksheet
     Dim wf As WorksheetFunction
@@ -241,7 +255,7 @@ Dim DataObj As Object
             H.SetAutoLogonPolicy 0
             H.send
             
-            URL = Sheets("Controls").Range("B10") & Sheets("Controls").Range("D10")
+            URL = Sheets("Controls").Range("B10") & Sheets("Controls").Range("D10") ' sets the URL to pull the "All" bucket
             
             Debug.Print URL
 
@@ -261,6 +275,8 @@ Dim DataObj As Object
                 TrailingMinusNumbers:=True
         End With
         LR = dump.Cells(Rows.Count, "C").End(xlUp).Row
+        
+        ' here is where the comparison with the DataD sheet is performed, where for every entry not found, the bucket is listed as unknown
         dump.Range("A" & x & ":A" & LR).Formula = "=IFNA(INDIRECT(""'DataD'!A""&(MATCH('Raw'!I2,'DataD'!I:I,0))),""Unknown"")"
         dump.Range("B" & x & ":B" & LR).Formula = "=D" & x & "/1000/60/60/24" ' sets column B to be the idle time in days
         
