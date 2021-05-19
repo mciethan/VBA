@@ -1,20 +1,22 @@
 Sub RefreshData()
-' create and assign variables
+' this pu
 
+' disable automatic calculation and screen updating during progress of macro so it runs faster
+Application.ScreenUpdating = False
+Application.Calculation = xlManual
+
+' create and assign variables
 Dim rodeoSheet, binsSheet, URLSheet As Worksheet
 Dim rodeoURL, binsURL1, binsURL2 As String
 
-Set rodeoSheet = ActiveWorkbook.Sheets("rodeo items")
-Set binsSheet = ActiveWorkbook.Sheets("bins report")
-Set URLSheet = ActiveWorkbook.Sheets("URLs")
+Set rodeoSheet = ThisWorkbook.Sheets("rodeo items")
+Set binsSheet = ThisWorkbook.Sheets("bins report")
+Set URLSheet = ThisWorkbook.Sheets("URLs")
 
+' the URLs sheet has formulas that construct the appropriate URL to pull from Rodeo and Stow Map based on the FC name
 rodeoURL = URLSheet.Cells(1, 2).Value
 binsURL1 = URLSheet.Cells(2, 6).Value
 binsURL2 = URLSheet.Cells(3, 6).Value
-
-' disable automatic calculation and screen updating during progress of macro
-Application.ScreenUpdating = False
-Application.Calculation = xlManual
 
 ' clear cells from both sheets
 rodeoSheet.Range("$A:$Z").Clear
@@ -33,14 +35,11 @@ binsSheet.Range("$C:$Z").Clear
     Application.CutCopyMode = False
     Selection.Copy
     ActiveWindow.Close
-    
-' refreshes rodeo PivotTable cache based on this data
-
 
 ' Pulls in floor 1 bins report data
     With binsSheet.QueryTables.Add(Connection:= _
         "URL;" & binsURL1 _
-        , Destination:=binsSheet.Range("$C$1"))
+        , Destination:=binsSheet.Range("$C$1")) ' paste in C1 because columns A and B have helper formulas
         .Name = Right(binsURL1, 8)
         .FieldNames = True
         .RowNumbers = False
@@ -105,7 +104,9 @@ nextRow = binsSheet.Cells(binsSheet.Rows.Count, "C").End(xlUp).Row
         TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=True, _
         Semicolon:=False, Comma:=True, Space:=False, Other:=False, FieldInfo _
         :=Array(Array(1, 1), Array(2, 1), Array(3, 1)), TrailingMinusNumbers:=True
-        
+
+' I would add something here that gets the last row of bins data, and then sets the formulas for columns A and B based off that number
+
 ' refresh pivot table data
 Application.Calculation = xlAutomatic
 Worksheets("bins pivot").PivotTables("PivotTable2").PivotCache.Refresh
