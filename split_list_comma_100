@@ -1,8 +1,12 @@
 Sub comma100()
+' takes a list of bins in column 1 and splits it into comma-separated lists of at most 100 bins, which are pasted into column 2
+' built to make it easier to use the SmartIQ tool, which only allows users to process 100 bins at a time, and they have to be pasted in comma separated format
+' basic design is to go down the list of bins one at a time adding them to a cell in column 2, until 100 have been added, in which case you start adding bins to the next cell
 
 Columns(2).ClearContents
 
-For s = 1 To 1000
+For s = 1 To 1000 ' this variable represents the row index of each output cell.  It increments every 100 bins. 
+' 1000 is arbitrary, could probably redesign to base this number off the number of bins inputted by the user instead, and then ditch the if condition to exit the sub when it finds a blank row.
 
     For i = 1 To 100
 
@@ -22,11 +26,7 @@ Next
 
 End Sub
 Sub clear()
-'
-' clear Macro
-'
 
-'
     Range("A1").Select
     Range(Selection, Selection.End(xlDown)).Select
     Selection.ClearContents
