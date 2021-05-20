@@ -1,6 +1,10 @@
+' this workbook is designed to help users consolidate only a certain portion of bins rather than completely emptying them.  This saved a lot of time for TNS HV retrofit at BOS7
+' user pastes consolidation recommendations, which consist of 5 columns (ID, bin, sku, quantity, and volume), into this sheet
+' and then they press a button and Excel calculates which picks they need to drop in order to clear a certain (user-defined) percentage of the inventory volume from each bin 
+
 Sub clear()
 
-    On Error Resume Next
+    On Error Resume Next ' should change to the AutoFilter method ShowAllData rather than continuing to use the worksheet method, would allow me to scrap the on error resume next
     Sheets("dashboard").ShowAllData
     Columns("A:E").Select
     Selection.clear
@@ -21,10 +25,10 @@ last_row = Cells(Rows.Count, 1).End(xlUp).Row
     Application.CutCopyMode = False
     ActiveWorkbook.Worksheets("dashboard").sort.SortFields.clear
     ActiveWorkbook.Worksheets("dashboard").sort.SortFields.Add2 _
-        Key:=Range("B2:B" & last_row), SortOn:=xlSortOnValues, Order:=xlAscending, _
+        Key:=Range("B2:B" & last_row), SortOn:=xlSortOnValues, Order:=xlAscending, _ ' sort by bin ID ascending
         DataOption:=xlSortNormal
     ActiveWorkbook.Worksheets("dashboard").sort.SortFields.Add2 _
-        Key:=Range("E2:E" & last_row), SortOn:=xlSortOnValues, Order:=xlAscending, _
+        Key:=Range("E2:E" & last_row), SortOn:=xlSortOnValues, Order:=xlAscending, _ ' then by inventory volume ascending
         DataOption:=xlSortNormal
     With ActiveWorkbook.Worksheets("dashboard").sort
         .SetRange Range("A1:O" & last_row)
@@ -35,7 +39,12 @@ last_row = Cells(Rows.Count, 1).End(xlUp).Row
         .Apply
     End With
     Range("A1").Select
+    
+' the sheet has a bunch of helper columns which calculate the total inventory volume of each bin and then which records to pick in order to stay below the threshold
+' those column formulas are just in the sheet, but in the future I should define them here based on the number of recommendations dropped by the user
+
 End Sub
+
 Sub copyPicks()
 
 Dim last_row As Integer
@@ -47,6 +56,7 @@ last_row = Cells(Rows.Count, 1).End(xlUp).Row
     Range("I2:I" & last_row).SpecialCells(xlCellTypeVisible).Select
     Selection.Copy
 End Sub
+
 Sub sortAndFilter()
 Call sort
 Call copyPicks
