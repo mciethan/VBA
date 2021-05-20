@@ -1,4 +1,9 @@
 Sub DPSpull()
+' basic design is for the file to pull 3 types of data (recent bin verifications, recent amnesty, and recent pallet transactions) into a single place for comparison
+' once data is pulled and sorted, the most recent sku of each verified bin is calculated, and then compared to nearby amnesty adds of that sku
+' end result is being able to identify instances where pallet pullers may have taken "found items" from virtually empty bins and dropped them in amnesty instead of raising andon
+' as a side benefit, this sheet also calculates pallet pull rates by associate for the current shift
+
 Application.ScreenUpdating = False
 Application.Calculation = xlCalculationAutomatic
 Application.Calculation = xlCalculationManual
@@ -22,21 +27,21 @@ Dim a, p As Date
 a = Int(filedatetime("\\ant\dept-na\BOS7\Public\ICQA DA\Amnesty\weekly_amnesty_adds.txt"))
 p = Int(filedatetime("\\ant\dept-na\BOS7\Public\ICQA DA\Transactions\P1P_transactions_2weeks.txt"))
 
-If a = Sheet3.Range("A" & aLR).Value Then
+If a = Sheet3.Range("A" & aLR).Value Then ' the amnesty data sheet is sorted oldest to newest, so this considers the date of the last entry on the amnesty data sheet
     ' do nothing
 Else
     ' refresh amnesty query
     ActiveWorkbook.Connections("Query - weekly_amnesty_adds").Refresh
 End If
 
-If p = Int(Sheet4.Range("A2").Value) Then
+If p = Int(Sheet4.Range("A2").Value) Then ' the pallet transactions sheet is sorted newest to oldest, so this considers the date of the first entry on that sheet
     ' do nothing
 Else
     ' refresh P1P query
     ActiveWorkbook.Connections("Query - P1P_transactions_2weeks").Refresh
 End If
 
-' resets these variables storing the last nonblank row number of the amnesty and P1P sheets, after any queries have refreshed
+' resets these variables, storing the last nonblank row number of the amnesty and P1P sheets, after any queries have refreshed
 aLR = Sheet3.Cells(Rows.Count, 1).End(xlUp).Row
 p1pLR = Sheet4.Cells(Rows.Count, 1).End(xlUp).Row
 
@@ -76,13 +81,13 @@ With Sheet1
     
     ' this is a arbitrary number which is meant to be a "score" of how likely each instance of amnesty is likely to be caused by the pallet puller
     ' the closer the addback location to the verify location, and the lower the time between verification and amnesty, the higher the score
-    ' the square root and exponent bits are set up to add more weight to the number of aisles away and less weight to the dwell time
+    ' the square root and exponent bits are set up to add more weight to the number of aisles away and less weight to the dwell time in calculating risk score
     .Range("Q2:Q" & last_row).Formula = "=round(sqrt(100/(sqrt(RC[-2])*(RC[-1]+2)^2.5)),2)"
     
 
     .Range("K1").FormulaArray = "=SUM(1/COUNTIF(A2:A" & last_row & ",A2:A" & last_row & "))" ' calculates number of unique pallet pull AAs
 
-
+' this calculates all the sheet cell values (which we will need for next part of macro) then disables automatic calculation again to improve processing time
 Application.Calculation = xlCalculationAutomatic
 Application.Calculation = xlCalculationManual
 
@@ -103,7 +108,9 @@ Debug.Print dbLR
 
     Range("A2").Select
     Selection.AutoFilter
-    ActiveSheet.Range("$A$1:$Q$" & last_row).AutoFilter Field:=13, Criteria1:="<>#N/A" _
+    
+    ' column 13 is where any matching amnesty adds are displayed, so filtering out the errors from this column shows only matching amnesty adds
+    ActiveSheet.Range("$A$1:$Q$" & last_row).AutoFilter Field:=13, Criteria1:="<>#N/A" _ 
         , Operator:=xlAnd
     Columns("K:K").ColumnWidth = 0.94
     Columns("L:L").ColumnWidth = 0.78
@@ -118,6 +125,8 @@ ActiveSheet.Range("$A$1:$Q$" & last_row).AutoFilter Field:=13, Criteria1:="<>#N/
         
 Range("A1").Select
     ActiveWorkbook.Worksheets("Raw Data").AutoFilter.sort.SortFields.Clear
+    
+    ' sort by risk score from highest to lowest
     ActiveWorkbook.Worksheets("Raw Data").AutoFilter.sort.SortFields.Add2 Key:= _
         Range("Q2:Q" & last_row), SortOn:=xlSortOnValues, Order:=xlDescending, DataOption _
         :=xlSortNormal
@@ -136,7 +145,7 @@ If (Sheet2.AutoFilterMode And Sheet2.FilterMode) Or Sheet2.FilterMode Then
   Sheet2.ShowAllData
 End If
 
-With Sheet2
+With Sheet2 ' because of array formulas, a normal .Clear function won't actually clear the cell formulas. This bit of code finds the array and deletes it
     .Select
     .Range("F15").Select
     Selection.CurrentArray.Select
@@ -187,7 +196,7 @@ End With
 Application.Calculation = xlCalculationAutomatic
 Application.Calculation = xlCalculationManual
 
-' this section adjusts the values in the "hours in path" column in order to account for break and lunch times
+' this section adjusts the values in the "hours in path" column in order to account for break and lunch times, which are stored in a fixed location on the dashboard
 For r = 15 To dbLR
     For i = 4 To 6
         If IsError(Sheet2.Cells(r, 6).Value) Then
@@ -208,7 +217,7 @@ For r = 15 To dbLR
     End If
 Next r
 
-' filter list to only show AAs who have been pulling during current shift
+' filter list to only show AAs who have been pulling during current shift (who have more than 0 verifications)
 Sheet2.Select
 Range("D14").Select
     Range(Selection, Selection.End(xlToRight)).Select
