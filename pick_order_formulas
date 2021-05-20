@@ -4,11 +4,14 @@ Dim diff As Integer
 
 With Sheets("variables")
 
+' H4 and F4 are cells where users are instructed to input the lowest and highest possible slot values in the area they want to reorder.
+
     diff = .Range("H4").Value + 10 - .Range("F4").Value
 
     .Columns(1).ClearContents
     .Columns(2).ClearContents
     
+    ' creates two helper columns, one with all the possible slot values in ascending order, and the other with all of them in descending order.  
     .Cells(1, 1).Value = .Range("F4").Value
     .Cells(1, 2).Value = .Range("H4").Value + 10
     .Cells(2, 1).formula = "=A1+1"
@@ -94,13 +97,13 @@ With Sheet1
     ' sort
     Columns("A:K").Select
     ActiveWorkbook.Worksheets("home").sort.SortFields.clear
-    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("B:B" _
+    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("B:B" _ ' sort by aisle pairing
         ), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
-    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("J:J" _
+    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("J:J" _ ' then by shelf pick order
         ), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
-    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("I:I" _
+    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("I:I" _ ' then by slot pick order
         ), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
-    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("K:K" _
+    ActiveWorkbook.Worksheets("home").sort.SortFields.Add Key:=Range("K:K" _ ' then by slot mini pick order
         ), SortOn:=xlSortOnValues, Order:=xlAscending, DataOption:=xlSortNormal
     With ActiveWorkbook.Worksheets("home").sort
         .SetRange Range("A:K")
@@ -117,6 +120,7 @@ End With
 Application.ScreenUpdating = True
 
 End Sub
+
 Sub clear()
 
     Rows(2).Select
