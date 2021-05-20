@@ -1,0 +1,108 @@
+Sub Pull_Audit_Data(StartDate As String, StartTime As String, EndDate As String, EndTime As String)
+
+' clear contents of Audit Data sheet
+Worksheets("Audit Data").Columns("A:Z").ClearContents
+
+' debug
+MsgBox ("https://apollo-audit.corp.amazon.com/reporting/downloads/bulk_detailed_by_audit_type.xlsx?utf8=%E2%9C%93&start_date=" & StartDate & "+" & StartTime & "&end_date=" & EndDate & "+" & EndTime & "&audit_type_id=235&fc_ids%5b%5d=635&button=")
+
+' pull apollo data and paste into sheet
+    Workbooks.Open Filename:= _
+        "https://apollo-audit.corp.amazon.com/reporting/results_by_audit.xlsx?audit_type_id=235&end_date=" & EndDate & "+" & EndTime & "+-0400&start_date=" & StartDate & "+" & StartTime & "+-0400"
+        ' "https://apollo-audit.corp.amazon.com/reporting/downloads/bulk_detailed_by_audit_type.xlsx?utf8=%E2%9C%93&start_date=" & StartDate & "+" & StartTime & "&end_date=" & EndDate & "+" & EndTime & "&audit_type_id=235&fc_ids%5b%5d=635&button="
+    Range(Selection, Selection.End(xlDown)).Select
+    Range(Selection, Selection.End(xlToRight)).Select
+    Selection.Copy
+    Windows("Apollo Pallet Audit Tracker").Activate
+    ActiveSheet.Paste Destination:=Worksheets("Audit Data").Range("A1")
+    Windows("results_by_audit.xlsx").Activate
+    Range("AA1").Select
+    Application.CutCopyMode = False
+    Selection.Copy
+    ActiveWindow.Close
+End Sub
+
+Sub PPR(FC As String, StartDate As String, StartTime As String, EndDate As String, EndTime As String)
+
+Dim StartHour
+Dim EndHour
+
+
+If Left(StartTime, 1) = "0" Then
+    StartHour = Right(StartTime, 1)
+Else
+    StartHour = StartTime
+End If
+
+If Left(EndTime, 1) = "0" Then
+    EndHour = Right(EndTime, 1)
+Else
+    EndHour = EndTime
+End If
+
+' clears PPR Sheet
+Sheets("PPR Data").Columns("A:AZZ").ClearContents
+                
+'Pulls in PPR
+    With Sheets("PPR Data").QueryTables.Add(Connection:= _
+        "URL;https://fclm-portal.amazon.com/reports/processPathRollup?reportFormat=HTML&warehouseId=" & FC & "&maxIntradayDays=1&spanType=Intraday&startDateIntraday=" & StartDate & "&startHourIntraday=" & StartHour & "&startMinuteIntraday=0&endDateIntraday=" & EndDate & "&endHourIntraday=" & EndHour & "&endMinuteIntraday=0&adjustPlanHours=true&_adjustPlanHours=on&_hideEmptyLineItems=on&employmentType=AllEmployees" _
+        , Destination:=Sheets("PPR Data").Range("$A$1"))
+        .Name = "Process Path Rollup"
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .BackgroundQuery = True
+        .RefreshStyle = xlOverwriteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .WebSelectionType = 2
+        .WebFormatting = xlWebFormattingNone
+        .WebPreFormattedTextToColumns = True
+        .WebConsecutiveDelimitersAsOne = True
+        .WebSingleBlockTextImport = False
+        .WebDisableDateRecognition = False
+        .WebDisableRedirections = False
+        .Refresh BackgroundQuery:=False
+        .Delete
+        
+        End With
+End Sub
+
+Sub Refresh()
+
+Dim FC As String
+Dim StartDay As String
+Dim StartTime As String
+Dim EndDay As String
+Dim EndTime As String
+
+With Sheets("Dashboard")
+    StartDay = .Range("I5").Value
+    StartTime = .Range("J5").Value
+    EndDay = .Range("K5").Value
+    EndTime = .Range("L5").Value
+End With
+
+Application.ScreenUpdating = False
+
+Call Pull_Audit_Data(StartDay, StartTime, EndDay, EndTime)
+
+With Sheets("Dashboard")
+    FC = .Range("F2").Value
+    StartDay = .Range("I6").Value
+    StartTime = .Range("J6").Value
+    EndDay = .Range("K6").Value
+    EndTime = .Range("L6").Value
+End With
+
+Call PPR(FC, StartDay, StartTime, EndDay, EndTime)
+
+ActiveWorkbook.RefreshAll
+Sheets("Dashboard").Select
+Application.ScreenUpdating = True
+
+End Sub
