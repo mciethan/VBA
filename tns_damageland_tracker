@@ -1,5 +1,5 @@
 Private Sub Worksheet_Change(ByVal Target As Range)
-' sheet code for dashboard to prompt refresh with new FC
+' sheet-specific code for dashboard to ask user if they want to refresh any time they select a different FC from cell A1
 Dim answer As Integer
 
 If Not Intersect(Target, Sheet2.Range("A1")) Is Nothing Then
@@ -14,14 +14,34 @@ Else
 End If
 
 End Sub
+
+Private Sub Workbook_Open()
+
+Dim answer As Integer
+
+' each time the workbook is opened, update H1 with the last modified datetime of the query textfile from Datanet
+Sheet2.Range("H1").Value = Int(FileDateTime("//ant/dept-na/BOS7/Public/ICQA DA/Inventory/TNS_damageland.txt")) - 1
+
+If Sheet2.Range("D1").Value <> Sheet2.Range("H1").Value Then
+    answer = MsgBox("There is more recent data available. Refresh query?", vbQuestion + vbYesNo + vbDefaultButton2, "More recent data available")
+    If answer = vbYes Then
+        Call refreshData
+    Else
+        ' do nothing
+    End If
+Else
+    ' do nothing
+End If
+End Sub
+
 Private Sub Worksheet_SelectionChange(ByVal Target As Range)
-' sheet code for dashboard to prompt refresh with new data
+' sheet-specific code for dashboard to ask user if they want to refresh if it detects new data (based on last modified datetime of query file)
 Dim answer As Integer
 Dim lastUpdated As String
 
 lastUpdated = Sheet2.Range("H1").Value
 
-' each time a different cell is selected, update H1 with the last modified datetime of the query textfile from Datanet. if the Datanet file updates while user is making selection changes in the file, they will be asked if they want to refresh.
+' each time a different cell is selected, update H1 with the last modified datetime of the query textfile from Datanet.
 Sheet2.Range("H1").Value = Int(FileDateTime("//ant/dept-na/BOS7/Public/ICQA DA/Inventory/TNS_damageland.txt")) - 1
 
 If lastUpdated <> Sheet2.Range("H1").Value Then
@@ -36,14 +56,13 @@ Else
 End If
 
 End Sub
+
 Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
-' sheet code for dashboard for deep diving buckets
+' sheet-specific code for dashboard to allow users to double click on particular cells to view raw data for particular slices of data.
 Application.ScreenUpdating = False
 
 Dim r, c, i, lastRowOfBinTypes As Integer
 Dim recs, bins, dash As Worksheet
-
-lastRowOfBinTypes = Sheet2.Cells(Rows.Count, "J").End(xlUp).Row
 
 Set dash = Sheet2 ' dashboard
 Set recs = Sheet1 ' records sheet
@@ -80,6 +99,8 @@ Next r
 
 Next c
 
+lastRowOfBinTypes = Sheet2.Cells(Rows.Count, "J").End(xlUp).Row
+
 ' this loop handles double-clicks on the links in the bin fullness table.  we have to use a variable (lastRowOfBinTypes) because different sites have different numbers of bin types in damageland
 For r = 8 To lastRowOfBinTypes
 
@@ -102,24 +123,8 @@ Next r
 Application.ScreenUpdating = True
 
 End Sub
-Private Sub Workbook_Open()
 
-Dim answer As Integer
 
-' each time the workbook is opened, update H1 with the last modified datetime of the query textfile from Datanet
-Sheet2.Range("H1").Value = Int(FileDateTime("//ant/dept-na/BOS7/Public/ICQA DA/Inventory/TNS_damageland.txt")) - 1
-
-If Sheet2.Range("D1").Value <> Sheet2.Range("H1").Value Then
-    answer = MsgBox("There is more recent data available. Refresh query?", vbQuestion + vbYesNo + vbDefaultButton2, "More recent data available")
-    If answer = vbYes Then
-        Call refreshData
-    Else
-        ' do nothing
-    End If
-Else
-    ' do nothing
-End If
-End Sub
 Sub refreshData()
 
 MsgBox "Please allow up to 30 seconds for the query to refresh."
@@ -140,6 +145,8 @@ lastrow = Sheet1.Cells(Rows.Count, "B").End(xlUp).Row
 
 Sheet2.Range("J:N").Clear
 
+' The query file has data down to the record level, but it also has bin-level data like total inventory volume. 
+' This section pastes the bin-level data (first 5 columns) into a different sheet and removes duplicates so that it's a list of unique bin values.
 Sheet4.Cells.Clear
 Sheet1.Select
 Columns("A:E").Select
@@ -167,7 +174,8 @@ With Sheet4
     .Columns("F:F").ColumnWidth = 11.36
 
 End With
-    
+
+' uses an Advanced Filter to paste all unique bin type names and paste them onto the dashboard. Every FC has a different combination of bin types in their damageland.
 Sheet1.Range("TNS_damageland[bin_type]").AdvancedFilter Action:= _
         xlFilterCopy, CopyToRange:=Sheet2.Range("J8"), Unique:=True
         
@@ -180,10 +188,10 @@ With Sheet2
 .Range("N7").Value = "Utilization"
 
 .Range("J8").Value = "TOTAL"
-.Range("K8").Formula = "=COUNTA(bins!C:C) - 1"
-.Range("L8").Formula = "=SUM(bins!F:F)"
-.Range("M8").Formula = "=ROUND(RC[-1]/RC[-2],2)"
-.Range("N8").Formula = "=SUM(bins!D:D)/SUM(bins!E:E)"
+.Range("K8").Formula = "=COUNTA(bins!C:C) - 1" ' total bins
+.Range("L8").Formula = "=SUM(bins!F:F)" ' total units
+.Range("M8").Formula = "=ROUND(RC[-1]/RC[-2],2)" ' average units per bin, rounded to two decimal places
+.Range("N8").Formula = "=SUM(bins!D:D)/SUM(bins!E:E)" ' utilization (sum of inventory volume divided by sum of net bin volume)
 .Range("N8").NumberFormat = "0.00%"
 
 lastRowOfBinTypes = .Cells(Rows.Count, "J").End(xlUp).Row
@@ -195,11 +203,11 @@ lastRowOfBinTypes = .Cells(Rows.Count, "J").End(xlUp).Row
         .TintAndShade = 0
     End With
 
-.Range("K9:K" & lastRowOfBinTypes).Formula = "=COUNTIF(bins!C2,RC[-1])"
-.Range("L9:L" & lastRowOfBinTypes).Formula = "=SUMIF(bins!C2,RC[-2],bins!C6)"
-.Range("M9:M" & lastRowOfBinTypes).Formula = "=ROUND(RC[-1]/RC[-2],2)"
+.Range("K9:K" & lastRowOfBinTypes).Formula = "=COUNTIF(bins!C2,RC[-1])" ' total bins by bin type
+.Range("L9:L" & lastRowOfBinTypes).Formula = "=SUMIF(bins!C2,RC[-2],bins!C6)" ' total units by bin type
+.Range("M9:M" & lastRowOfBinTypes).Formula = "=ROUND(RC[-1]/RC[-2],2)" ' average units per bin by bin type
 With .Range("N9:N" & lastRowOfBinTypes)
-    .Formula = "=SUMIF(bins!C2,RC[-4],bins!C4)/SUMIF(bins!C2,RC[-4],bins!C5)"
+    .Formula = "=SUMIF(bins!C2,RC[-4],bins!C4)/SUMIF(bins!C2,RC[-4],bins!C5)" ' utilization by bin type
     .NumberFormat = "0.00%"
 End With
 
