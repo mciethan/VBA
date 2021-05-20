@@ -1,0 +1,250 @@
+Sub Refresh()
+' create and assign variables
+Dim URL1 As String
+Dim URL2 As String
+Dim Data As Worksheet
+Dim ws As Worksheet
+Set Data = ActiveWorkbook.Sheets("data")
+
+' if i wanted to scale this to other FCs I would need to write some code to determine how many floors there are and then pull each one from bins report dynamically - 2 floors is BOS7 specific
+URL1 = "URL;" & Data.Range("A1").Value ' floor 1
+URL2 = "URL;" & Data.Range("A2").Value ' floor 2
+
+Application.ScreenUpdating = False
+
+' clear cells
+Data.Range("$F:$Z").Clear
+
+' Pulls in floor 1 data
+Data.Activate
+    Range("F1").Select
+        With Data.QueryTables.Add(Connection:=URL1, _
+        Destination:=Range("F1")) ' paste in F1 because A thru E contain helper column formulas
+        .Name = "data"
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .BackgroundQuery = True
+        .RefreshStyle = xlOverwriteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .WebSelectionType = 2
+        .WebFormatting = xlWebFormattingNone
+        .WebPreFormattedTextToColumns = True
+        .WebConsecutiveDelimitersAsOne = True
+        .WebSingleBlockTextImport = False
+        .WebDisableDateRecognition = False
+        .WebDisableRedirections = False
+        .Refresh BackgroundQuery:=False
+        .Delete
+
+    End With
+
+' define new variable to find next blank row
+Dim nextRow As Long
+nextRow = Data.Cells(Data.Rows.count, "F").End(xlUp).Row
+
+' pull floor 2 data and paste it below floor 1 data
+Data.Select
+    Range("F" & nextRow).Select
+        With Data.QueryTables.Add(Connection:=URL2, _
+        Destination:=Range("F" & nextRow))
+        .Name = "data"
+        .FieldNames = True
+        .RowNumbers = False
+        .FillAdjacentFormulas = False
+        .PreserveFormatting = True
+        .RefreshOnFileOpen = False
+        .BackgroundQuery = True
+        .RefreshStyle = xlOverwriteCells
+        .SavePassword = False
+        .SaveData = True
+        .AdjustColumnWidth = True
+        .RefreshPeriod = 0
+        .WebSelectionType = 2
+        .WebFormatting = xlWebFormattingNone
+        .WebPreFormattedTextToColumns = True
+        .WebConsecutiveDelimitersAsOne = True
+        .WebSingleBlockTextImport = False
+        .WebDisableDateRecognition = False
+        .WebDisableRedirections = False
+        .Refresh BackgroundQuery:=False
+        .Delete
+        
+    End With
+
+' split columns
+Columns("F:F").Select
+    Selection.TextToColumns Destination:=Range("F1"), DataType:=xlDelimited, _
+        TextQualifier:=xlDoubleQuote, ConsecutiveDelimiter:=False, Tab:=True, _
+        Semicolon:=False, Comma:=True, Space:=False, Other:=False, FieldInfo _
+        :=Array(Array(1, 1), Array(2, 1), Array(3, 1)), TrailingMinusNumbers:=True
+        
+' refresh all cells
+    ActiveWorkbook.RefreshAll
+    
+' at this point, I should probably store the last non-blank row into a variable, and then construct the helper column formulas to that range here. currently i just have those formulas extended to a fixed large range
+    
+' ask to plot data on charts
+Sheets("Daily Report").Select
+
+If MsgBox("Add To Chart?", vbYesNo) = vbYes Then
+    Call Plot
+End If
+
+Sheets("Daily Report").Select
+Application.ScreenUpdating = True
+
+End Sub
+
+Function Sheet_Exists(WorkSheet_Name As String) As Boolean
+' helper function for identifying if sheet names exist, so that the macro can dynamically generate new sheets if needed without creating duplicates
+Dim Work_sheet As Worksheet
+
+Sheet_Exists = False
+
+For Each Work_sheet In ThisWorkbook.Worksheets
+
+    If Work_sheet.Name = WorkSheet_Name Then
+        Sheet_Exists = True
+    End If
+
+Next
+
+End Function
+
+Sub Plot()
+
+Dim last_row, last_col, nextRow, tempCol, x, i As Integer
+Dim today As Date
+Dim Sheet_Name As String
+Dim iChartObj As ChartObject
+Dim iChart As Chart
+Dim ws, ch As Worksheet
+Dim srsNew As Series
+
+Set ws = ActiveWorkbook.Sheets("Daily Report")
+today = ws.Range("A1").Value
+last_row = ws.Cells(Rows.count, 1).End(xlUp).Row
+last_col = ws.Cells(2, Columns.count).End(xlToLeft).Column
+
+
+' there will be as many sheets as there are columns of capacity metrics on the daily report
+For i = 2 To last_col
+
+Sheet_Name = ws.Cells(2, i).Value ' row 2 of the dashboard contains various capacity metrics, and we want to have separate sheets for each
+
+If (Sheet_Exists(Sheet_Name) = False) Then ' creates new sheet with table in case a sheet doesn't exist yet for each metric
+    Worksheets.Add(After:=Sheets(i - 1)).Name = Sheet_Name ' inserts the sheet in order of column
+    
+    Set ch = ThisWorkbook.Sheets(Sheet_Name)
+    ch.Cells(1, 3) = "Date"        ' inserts the header Date into the top left cell of the table
+    
+Else
+    Set ch = ActiveWorkbook.Sheets(Sheet_Name)
+End If
+
+
+
+For Each iChartObj In ch.ChartObjects ' delete existing charts from each sheet
+    iChartObj.Delete
+Next
+
+Set iChartObj = ch.ChartObjects.Add(Top:=90, Left:=110, Width:=700, Height:=500) ' adds a new chart in a specific position on the sheet
+Set iChart = iChartObj.Chart
+    
+    With iChart
+        .Parent.Name = Sheet_Name & "Chart" ' names the chart according to the sheet name. this chart will display trends for each metric broken down by bin areas
+        .ChartType = xlXYScatterLines ' makes the chart an XY scatter plot with lines
+        .ApplyLayout (4)
+    End With
+    
+Set iChartObj = ch.ChartObjects.Add(Top:=90, Left:=900, Width:=350, Height:=250) 'adds another chart next to the first one
+Set iChart = iChartObj.Chart
+    
+    With iChart
+        .Parent.Name = "Overall" & Sheet_Name & "Chart" ' this chart will display the trend for that metric for the building as a whole
+        .ChartType = xlXYScatterLines
+        .ApplyLayout (4)
+    End With
+
+' add new table entries onto each sheet
+nextRow = ch.Cells(Rows.count, 3).End(xlUp).Row + 1
+ch.Cells(nextRow, 3) = Date + Time ' inserts the current date and time into the first cell of the first blank row of the table
+ch.Cells(nextRow, 3).NumberFormat = "mm/dd" ' formats the cell to display only the month and day of the timestamp
+
+For x = 4 To last_row ' populate table cells with data from daily report for each bin type
+
+    If IsError(Application.Match(ch.Cells(1, x), ws.Range(ws.Cells(1, 1), ws.Cells(last_row, 1)), 0)) Then ' for any chart column header that's not in the list of bin areas on the daily report sheet, move that column to the end
+        ch.Columns(x).Select
+        Selection.Cut
+        Selection.End(xlToRight).Offset(0, 1).Select
+        ActiveSheet.paste
+        ch.Columns(x + 1).Select
+        Range(Selection, Selection.End(xlToRight)).Select
+        Selection.Cut
+        ch.Cells(1, x).Select
+        ActiveSheet.paste
+    End If
+    
+    If IsError(Application.Match(ws.Range("A" & x), ch.Range(ch.Cells(1, 4), ch.Cells(1, last_row)), 0)) Then ' for any bin area on the daily report that doesn't yet have a chart column, insert a new column for that bin area in order
+        ch.Columns(x).Select
+        Range(Selection, Selection.End(xlToRight)).Select
+        Selection.Cut
+        ch.Cells(1, x + 1).Select
+        ActiveSheet.paste
+        ch.Cells(1, x).Value = ws.Cells(x, 1)
+    End If
+    
+    If ws.Range("A" & x) <> ch.Cells(1, x) Then  ' ensures chart columns are in same order as bin areas
+        ch.Columns(x).Select
+        Range(Selection, Selection.End(xlToRight)).Select
+        Selection.Cut
+        ch.Cells(1, x + 1).Select
+        ActiveSheet.paste
+        tempCol = Application.Match(ws.Range("A" & x), ch.Range(ch.Cells(1, 1), ch.Cells(1, last_row)), 0)
+        ch.Columns(tempCol).Select
+        Selection.Cut
+        ch.Cells(1, x).Select
+        ActiveSheet.paste
+        ch.Columns(tempCol + 1).Select
+        Range(Selection, Selection.End(xlToRight)).Select
+        Selection.Cut
+        ch.Cells(1, tempCol).Select
+        ActiveSheet.paste
+    End If
+            
+    ch.Cells(nextRow, x) = ws.Cells(x, i) ' the data points on the table are set as the value of the corresponding cell in the daily report
+            
+    ' creates series on charts using data from the table
+    If x <> last_row Then
+        With ch.ChartObjects(Sheet_Name & "Chart")
+            .Activate ' activate the regular chart to plot data from columns that are not the Total column
+            .Chart.HasTitle = True
+            .Chart.ChartTitle.Text = Sheet_Name & " - by Area"
+        End With
+    Else
+        With ch.ChartObjects("Overall" & Sheet_Name + "Chart")
+            .Activate ' activate the Total chart to plot data from the Total column
+            .Chart.HasTitle = True
+            .Chart.ChartTitle.Text = Sheet_Name & " - Building-Wide"
+        End With
+    End If
+            
+    Set srsNew = ActiveChart.SeriesCollection.NewSeries
+    With srsNew
+        .Name = ch.Cells(1, x) ' the name of each series is the name of the header of each column
+        .Values = ch.Range(ch.Cells(2, x), ch.Cells(nextRow, x)) ' the y values for each series are the data points in the corresponding column
+        .XValues = ch.Range(ch.Cells(2, 3), ch.Cells(nextRow, 3)) ' the x values for each series are the 3rd column, i.e. the snapshot dates
+    End With
+            
+                
+Next x
+
+Next i ' repeats the whole process with the next metric to be plotted on another sheet
+
+End Sub
