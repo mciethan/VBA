@@ -1,5 +1,4 @@
 Sub RefreshData()
-' this pu
 
 ' disable automatic calculation and screen updating during progress of macro so it runs faster
 Application.ScreenUpdating = False
