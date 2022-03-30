@@ -20,7 +20,7 @@ Private Sub Workbook_Open()
 Dim answer As Integer
 
 ' each time the workbook is opened, update H1 with the last modified datetime of the query textfile from Datanet
-Sheet2.Range("H1").Value = Int(FileDateTime("//ant/dept-na/BOS7/Public/ICQA DA/Inventory/TNS_damageland.txt")) - 1
+Sheet2.Range("H1").Value = Int(FileDateTime("FILEPATH_REDACTED")) - 1
 
 If Sheet2.Range("D1").Value <> Sheet2.Range("H1").Value Then
     answer = MsgBox("There is more recent data available. Refresh query?", vbQuestion + vbYesNo + vbDefaultButton2, "More recent data available")
@@ -42,7 +42,7 @@ Dim lastUpdated As String
 lastUpdated = Sheet2.Range("H1").Value
 
 ' each time a different cell is selected, update H1 with the last modified datetime of the query textfile from Datanet.
-Sheet2.Range("H1").Value = Int(FileDateTime("//ant/dept-na/BOS7/Public/ICQA DA/Inventory/TNS_damageland.txt")) - 1
+Sheet2.Range("H1").Value = Int(FileDateTime("FILEPATH_REDACTED")) - 1
 
 If lastUpdated <> Sheet2.Range("H1").Value Then
     answer = MsgBox("There is more recent data available. Refresh query?", vbQuestion + vbYesNo + vbDefaultButton2, "More recent data available")
