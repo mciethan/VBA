@@ -1,16 +1,13 @@
 ## Introduction
-Amazon provided its fulfillment centers with a variety of internal web-based tools, developed and maintained by professional software developers, that leaders could use to pull close-to-real-time data on site productivity, quality, and safety metrics.  However, operational leaders at individual warehouses often needed these data tailored or processed in ways beyond what these tools are able to offer.  A common format that warehouse-level analysts like myself would use to accomplish these extra processing steps in a semi-automated, portable way was the macro-enabled Excel dashboard, enabling leaders to click a button and have the most recent data populate in a digestible format.
+Amazon provided its fulfillment centers with a variety of internal web-based tools, developed and maintained by professional software developers, that leaders could use to pull close-to-real-time data on site productivity, quality, and safety metrics.  However, operational leaders at individual warehouses often needed these data re-aggregated, combined with other datasets, or otherwise processed for them to be most useful for real-time data reporting needs.  A common format that warehouse-level data analysts like myself would use to accomplish these extra processing steps in a semi-automated, portable way was the macro-enabled Excel dashboard.  These dashboards enabled leaders to click a button and have the most recent data populate in a custom format, and Excel's ability to records macros was helpful for me as someone with little prior coding experience to see how different spreadsheet operations could be represented in code.
 
-Broadly speaking, the VBA macros I built fall into three categories:
+Broadly speaking, the VBA scripts I built fall into three categories:
 
 ### Paste and Run
-paste data and then run the code (split list, pick order formulas, vna consolidation formulas). only interacts with cells
-(under construction)
+Some Excel dashboards were designed to have users paste data into a specified cell range and then click a button to have that data processed in a certain way.  Scripts in this category, like split_list_comma_100, pick_order_formulas, and vna_consolidation_formulas, only interact with cells inside the workbook rather than reading data from local files or from the web.  Pick_order_formulas and vna_consolidation_formulas have some complexity because they support user-specified parameters, whereas split_list_comma_100 is a very simple macro for a very specific task.
 
 ### Web Scraping
-scrape and transform most recent realtime data (capacity, consolidation, pallet audit, iol). interacts with cells and webpages
-(under construction)
+Other Excel dashboards would pull their data from internal websites, taking advantage of either a consistent and parameterizable URL format or an API, so that clicking a button will display the latest data automatically without the need for copy and pasting into the Excel file.  The capacity_report, consolidation_opportunity_finder, pallet_audit_tracker, and IOL_tracker scripts all include web scraping elements, in addition to more general data transformations. Most of these scripts consist of a single macro which pulls and formats updated data, but the IOL tracker has additional macros that filter and transform data when users double-click in certain areas.  All of these files support user-specified parameters to some degree.
 
 ### Web Scraping + Shared Drives
-scrape most recent data, combined with shared drive file from an ETL job - not as portable (pallet pull, damageland). interacts with cells, web, and files
-(under construction)
+The pallet_pull_tracker and TNS_damageland_tracker scripts include connections with files that Amazon users would have access to on shared drives.  These files would be updated with fresh data on a daily basis by ETL jobs, and then running the macros would read those data from the shared drive into the workbook and combine it with real-time data from web scraping.  The damageland tracker has a macro that filters data in response to double-clicking, and the pallet pull tracker includes some complex data lookup and transformation operations using Excel's index and match functions.
