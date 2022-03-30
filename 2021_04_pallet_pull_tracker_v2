@@ -24,8 +24,8 @@ p1pLR = Sheet4.Cells(Rows.Count, 1).End(xlUp).Row
 ' refreshes background queries for amnesty and P-1-P transactions only if the text files from the Datanet drop have been updated compared to the data currently in the sheet
 Dim a, p As Date
 
-a = Int(filedatetime("\\ant\dept-na\BOS7\Public\ICQA DA\Amnesty\weekly_amnesty_adds.txt"))
-p = Int(filedatetime("\\ant\dept-na\BOS7\Public\ICQA DA\Transactions\P1P_transactions_2weeks.txt"))
+a = Int(filedatetime("FILEPATH_REDACTED"))
+p = Int(filedatetime("FILEPATH_REDACTED"))
 
 If a = Sheet3.Range("A" & aLR).Value Then ' the amnesty data sheet is sorted oldest to newest, so this considers the date of the last entry on the amnesty data sheet
     ' do nothing
