@@ -1,7 +1,7 @@
 ## Introduction
 Amazon provided its fulfillment centers with a variety of internal web-based tools, developed and maintained by professional software developers, that leaders could use to pull close-to-real-time data on site productivity, quality, and safety metrics.  However, operational leaders at individual warehouses often needed these data re-aggregated, combined with other datasets, or otherwise processed for them to be most useful for real-time data reporting needs.  A common format that warehouse-level data analysts like myself would use to accomplish these extra processing steps in a semi-automated, portable way was the macro-enabled Excel dashboard.  These dashboards enabled leaders to click a button and have the most recent data populate in a custom format, and Excel's ability to record macros was helpful for me as someone with little prior coding experience to see how different spreadsheet operations could be represented in code.
 
-Broadly speaking, the VBA scripts I built fall into three categories:
+The files in this repo are archived, lightly redacted versions of the original VBA scripts I built.  Broadly speaking, they fall into three categories:
 
 ### Paste and Run
 For some Excel dashboards, users would paste data into a specified cell range and then click a button to have that data processed in a certain way.  Scripts in this category, like split_list_comma_100, pick_order_formulas, and vna_consolidation_formulas, only interact with cells inside the workbook rather than reading data from local files or from the web.  Pick_order_formulas and vna_consolidation_formulas have some complexity because they support user-specified parameters, whereas split_list_comma_100 is a very simple macro for a very specific formatting task.
